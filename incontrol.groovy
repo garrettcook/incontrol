@@ -61,12 +61,12 @@ definition(
 
 preferences {
     section("InControl Auth") {
-        input "username", "text", title: "InControl Username", required: true
-        input "password", "password", title: "InControl Password", required: true
-        input "pin", "password", title: "InControl PIN"
+        input "username", "text", title: "Username", required: true
+        input "password", "password", title: "Password", required: true
+        input "pin", "password", title: "PIN"
         // input "deviceId", "text", title: "X-Device-Id", required: true
         input "vin", "text", title: "VIN", required: true
-        input "target_temperature", "number", title: "Preconditioning Target Temperature", description: "(In Celsius x 10, e.g. 215 for 21.5degC)"
+        input "target_temperature", "number", title: "Preconditioning Target Temperature", description: "(In Celsius x 10)"
         input "PERMANENT_MAX_SOC", "number", title: "Daily Charge Limit", defaultValue: 70
         input "ONE_OFF_MAX_SOC", "number", title: "Only-Once Charge Limit", defaultValue: 100
     }
@@ -141,8 +141,8 @@ private authenticateUser() {
 			if (authenticateResp.status != 200) {
 				throw new Exception("Did not receive successful response status code.  Received code: ${authenticateResp.status}")
 			} else {
-				def responseJson = authenticateResp.data
-				displayDebugLog("Received data: ${responseJson}")
+				def jsonResponseData = authenticateResp.data
+				displayDebugLog("Received data: ${jsonResponseData}")
 				state.AccessToken = authenticateResp.data.access_token
 				state.AuthToken = authenticateResp.data.authorization_token
 				state.RefreshToken = authenticateResp.data.refresh_token
@@ -181,8 +181,8 @@ private refreshToken() {
 			if (refreshResp.status != 200) {
 				throw new Exception("Did not receive successful response status code.  Received code: ${refreshResp.status}")
 			} else {
-				def responseJson = refreshResp.data
-				displayDebugLog("Received data: ${responseJson}")
+				def jsonResponseData = refreshResp.data
+				displayDebugLog("Received data: ${jsonResponseData}")
 				state.AccessToken = refreshResp.data.access_token
 				state.AuthToken = refreshResp.data.authorization_token
 				state.RefreshToken = refreshResp.data.refresh_token
@@ -251,9 +251,9 @@ private login() {
 			if (loginResp.status != 200) {
 				throw new Exception("Did not receive successful response status code.  Received code: ${loginResp.status}")
 			} else {
-				def responseJson = loginResp.data
-				displayDebugLog("Received data: ${responseJson}")
-				state.UserID = responseJson.userId
+				def jsonResponseData = loginResp.data
+				displayDebugLog("Received data: ${jsonResponseData}")
+				state.UserID = jsonResponseData.userId
 			}
 		}
 	} catch(Exception ex) {
@@ -282,8 +282,8 @@ private attributes() {
 		if (attributesResp.status != 200) {
 			log.warn("Did not receive successful response status code.  Received code: ${attributesResp.status}")
 		} else {
-			def responseJson = attributesResp.data
-			displayDebugLog("Received data: ${responseJson}")
+			def jsonResponseData = attributesResp.data
+			displayDebugLog("Received data: ${jsonResponseData}")
 		}
 	}
 }
@@ -309,17 +309,16 @@ private getServiceStatus(customerServiceId, canRunAgain = true) {
 			log.warn("Did not receive successful response status code.  Received code: ${customerServiceResp.status}")
 		} else {
 			def data = "${customerServiceResp.data}"
-			def jsonResp = new groovy.json.JsonSlurper().parseText(data)
-			state.customerServiceId = jsonResp.status
-			displayDebugLog("customerService data received: ${jsonResp}")
-			// if (jsonResp.failureDescription == null) {
+			def jsonResponseData = new groovy.json.JsonSlurper().parseText(data)
+			state.customerServiceId = jsonResponseData.status
+			displayDebugLog("customerService data received: ${jsonResponseData}")
 			if (state.customerServiceId == 'Started' || state.customerServiceId == 'MessageDelivered' || state.customerServiceId == 'Running') {
-				sendEvent(name: jsonResp.serviceType, value: jsonResp.status, descriptionText: jsonResp.serviceType + " service", displayed: true)
+				sendEvent(name: jsonResponseData.serviceType, value: jsonResponseData.status, descriptionText: jsonResponseData.serviceType + " service", displayed: true)
 				// if (state.customerServiceId == 'Started' || state.customerServiceId == 'MessageDelivered' || state.customerServiceId == 'Running')
 				runIn(2, 'getServiceStatus', [data: customerServiceId])
 			} else {
-				sendEvent(name: jsonResp.serviceType, value: jsonResp.status + ": " + jsonResp.failureDescription, descriptionText: jsonResp.serviceType + " service", displayed: true)
-				if (canRunAgain == true && state.customerServiceId == "Failed" && jsonResp.failureDescription != "serviceAlreadyRunning" && jsonResp.failureDescription != "vehiclePowerModeNotCorrect" && jsonResp.serviceParameters == [["key":"PRECONDITIONING","value":"START"]]) {
+				sendEvent(name: jsonResponseData.serviceType, value: jsonResponseData.status + ": " + jsonResponseData.failureDescription, descriptionText: jsonResponseData.serviceType + " service", displayed: true)
+				if (canRunAgain == true && state.customerServiceId == "Failed" && jsonResponseData.failureDescription != "serviceAlreadyRunning" && jsonResponseData.failureDescription != "vehiclePowerModeNotCorrect" && jsonResponseData.serviceParameters == [["key":"PRECONDITIONING","value":"START"]]) {
 					pauseExecution(10000)
 					authenticateCommand('preconditioning_START', false)
 				}
@@ -365,36 +364,36 @@ private vehicleStatus(canRunAgain = true) {
 				log.warn("Did not receive successful response status code.  Received code: ${vehicleStatusResp.status}")
 			} else {
 				def data = "${vehicleStatusResp.data}"
-				def jsonResp = new groovy.json.JsonSlurper().parseText(data)
+				def jsonResponseData = new groovy.json.JsonSlurper().parseText(data)
 				def responseValue
-				displayDebugLog("${jsonResp}")
-				sendEvent(name: "lastUpdatedTime", value: jsonResp.lastUpdatedTime, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_STATE_OF_CHARGE'}
+				displayDebugLog("${jsonResponseData}")
+				sendEvent(name: "lastUpdatedTime", value: jsonResponseData.lastUpdatedTime, displayed: true)
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_STATE_OF_CHARGE'}
 				sendEvent(name: "battery", value: responseValue.value, descriptionText: "Traction Battery", displayed: true, unit: "%")
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_PERMANENT_MAX_SOC_VALUE'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_PERMANENT_MAX_SOC_VALUE'}
 				sendEvent(name: "EV_PERMANENT_MAX_SOC_VALUE", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_ONE_OFF_MAX_VALUE'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_ONE_OFF_MAX_VALUE'}
 				sendEvent(name: "EV_ONE_OFF_MAX_VALUE", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_ONE_OFF_MAX_SOC_CHARGE_SETTING_CHOICE'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_ONE_OFF_MAX_SOC_CHARGE_SETTING_CHOICE'}
 				sendEvent(name: "EV_ONE_OFF_MAX_SOC_CHARGE_SETTING_CHOICE", value: responseValue.value, displayed: true)
 				if (responseValue.value == 'CLEAR') {
 					sendEvent(name: "levelPreset", value: PERMANENT_MAX_SOC, displayed: true)
 				} else {
 					sendEvent(name: "levelPreset", value: ONE_OFF_MAX_SOC, displayed: true)
 				}
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_CHARGING_STATUS'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_CHARGING_STATUS'}
 				sendEvent(name: "EV_CHARGING_STATUS", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_CHARGING_RATE_MILES_PER_HOUR'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_CHARGING_RATE_MILES_PER_HOUR'}
 				sendEvent(name: "EV_CHARGING_RATE_MILES_PER_HOUR", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_MINUTES_TO_FULLY_CHARGED'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_MINUTES_TO_FULLY_CHARGED'}
 				sendEvent(name: "EV_MINUTES_TO_FULLY_CHARGED", value: responseValue.value, displayed: true)
-				// responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_CHARGE_FAULT'}
+				// responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_CHARGE_FAULT'}
 				// state.EV_CHARGE_FAULT = responseValue.value
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_RANGE_ON_BATTERY_MILES'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_RANGE_ON_BATTERY_MILES'}
 				sendEvent(name: "EV_RANGE_ON_BATTERY_MILES", value: responseValue.value, displayed: true, unit: "mi")
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'BATTERY_VOLTAGE'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'BATTERY_VOLTAGE'}
 				sendEvent(name: "BATTERY_VOLTAGE", value: responseValue.value, descriptionText: "Starter Battery", displayed: true, unit: "V")
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'DOOR_IS_ALL_DOORS_LOCKED'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'DOOR_IS_ALL_DOORS_LOCKED'}
 				if (responseValue.value == 'TRUE') {
 					sendEvent(name: "lock", value: 'locked', displayed: true)
 				} else if (responseValue.value == 'FALSE') {
@@ -402,7 +401,7 @@ private vehicleStatus(canRunAgain = true) {
 				} else {
 					sendEvent(name: "lock", value: 'unknown', displayed: true)
 				}
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_PRECONDITION_OPERATING_STATUS'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_PRECONDITION_OPERATING_STATUS'}
 				sendEvent(name: "EV_PRECONDITION_OPERATING_STATUS", value: responseValue.value, displayed: true)
 				if (responseValue.value == 'STARTUP' || responseValue.value == 'PRECLIM') {
 					sendEvent(name: "sessionStatus", value: 'running', displayed: true)
@@ -411,24 +410,24 @@ private vehicleStatus(canRunAgain = true) {
 				} else {
 					sendEvent(name: "sessionStatus", value: 'unknown', displayed: true)
 				}
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'EV_PRECONDITION_REMAINING_RUNTIME_MINUTES'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'EV_PRECONDITION_REMAINING_RUNTIME_MINUTES'}
 				// sendEvent(name: "EV_PRECONDITION_REMAINING_RUNTIME_MINUTES", value: responseValue.value, displayed: true)
 				sendEvent(name: "timeRemaining", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'WINDOW_FRONT_LEFT_STATUS'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'WINDOW_FRONT_LEFT_STATUS'}
 				sendEvent(name: "WINDOW_FRONT_LEFT_STATUS", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'WINDOW_FRONT_RIGHT_STATUS'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'WINDOW_FRONT_RIGHT_STATUS'}
 				sendEvent(name: "WINDOW_FRONT_RIGHT_STATUS", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'WINDOW_REAR_LEFT_STATUS'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'WINDOW_REAR_LEFT_STATUS'}
 				sendEvent(name: "WINDOW_REAR_LEFT_STATUS", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'WINDOW_REAR_RIGHT_STATUS'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'WINDOW_REAR_RIGHT_STATUS'}
 				sendEvent(name: "WINDOW_REAR_RIGHT_STATUS", value: responseValue.value, displayed: true)
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'TYRE_PRESSURE_FRONT_LEFT'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'TYRE_PRESSURE_FRONT_LEFT'}
 				sendEvent(name: "TYRE_PRESSURE_FRONT_LEFT", value: Math.round(responseValue.value.toInteger() * 10 / 68.9476) / 10, descriptionText: "Front Left Tire", displayed: true, unit: "psi")
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'TYRE_PRESSURE_FRONT_RIGHT'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'TYRE_PRESSURE_FRONT_RIGHT'}
 				sendEvent(name: "TYRE_PRESSURE_FRONT_RIGHT", value: Math.round(responseValue.value.toInteger() * 10 / 68.9476) / 10, descriptionText: "Front Right Tire", displayed: true, unit: "psi")
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'TYRE_PRESSURE_REAR_LEFT'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'TYRE_PRESSURE_REAR_LEFT'}
 				sendEvent(name: "TYRE_PRESSURE_REAR_LEFT", value: Math.round(responseValue.value.toInteger() * 10 / 68.9476) / 10, descriptionText: "Rear Left Tire", displayed: true, unit: "psi")
-				responseValue = jsonResp.vehicleStatus.find {it.key == 'TYRE_PRESSURE_REAR_RIGHT'}
+				responseValue = jsonResponseData.vehicleStatus.find {it.key == 'TYRE_PRESSURE_REAR_RIGHT'}
 				sendEvent(name: "TYRE_PRESSURE_REAR_RIGHT", value: Math.round(responseValue.value.toInteger() * 10 / 68.9476) / 10, descriptionText: "Rear Right Tire", displayed: true, unit: "psi")
 			}
 		}
@@ -605,7 +604,7 @@ private authenticateCommand(function, canRunAgain = true) {
 					}
 				}
 			} else {
-				// def responseJson = authenticateCommandResp
+				// def jsonResponseData = authenticateCommandResp
 				state.CommandToken = authenticateCommandResp.data.token
 				displayInfoLog("Command authentication successful")
 				def performCommandParams = [
@@ -647,16 +646,17 @@ private authenticateCommand(function, canRunAgain = true) {
 							}
 						} else {
 							displayInfoLog("'" + function + "' command sent successfully")
-							def data = "${performCommandResp.data}"
-							// try {
-								// log.info(data)
-								responseJson = performCommandResp.data
-								// def jsonResp = new groovy.json.JsonSlurper().parseText(data)
-							// } catch(Exception ex) {
-							// }
+							try {
+								def data = "${performCommandResp.data}"
+								def jsonResponseData = new groovy.json.JsonSlurper().parseText(data)
+                                customerServiceId = jsonResponseData.customerServiceId
+							} catch(Exception ex) {
+								jsonResponseData = performCommandResp.data
+                                customerServiceId = jsonResponseData.customerServiceId
+							}
 							// if (runGetServiceStatus && canRunAgain == true)
 							if (runGetServiceStatus)
-								getServiceStatus(responseJson.customerServiceId, false)
+								getServiceStatus(customerServiceId, false)
 						}
 					}
 				} catch(Exception ex) {
